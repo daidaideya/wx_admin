@@ -21,3 +21,8 @@ Thumbs.db
 
 # Temporary
 *.tmp
+
+# Data directories (database files, keep outside git)
+data/
+*.rdb
+*.aof

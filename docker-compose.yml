@@ -8,6 +8,7 @@ services:
       - "8061:8061"
     volumes:
       - ./wechatReal08/conf:/app/conf
+      - wx-backend-data:/app/data
     restart: unless-stopped
 
   # Redis 服务
@@ -16,7 +17,10 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      # Redis 数据目录映射到宿主机，确保数据持久化
+      # 重要: 数据保存在宿主机 ./data/redis 目录，重装系统前请备份此目录
+      - ./data/redis:/data
+    command: redis-server --appendonly yes --appendfilename "appendonly.aof"
     restart: unless-stopped
 
   # WX Admin 管理面板
@@ -35,4 +39,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  redis-data:
+  wx-backend-data:

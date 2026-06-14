@@ -137,6 +137,40 @@ REDIS_ADDR=redis:6379
 TZ=Asia/Shanghai
 ```
 
+### 数据持久化
+
+**重要**：Redis 数据目录映射到宿主机的 `./data/redis` 目录，确保数据不会因为容器重建或系统重装而丢失。
+
+```
+wx-admin/
+├── data/
+│   └── redis/          # Redis 数据文件 (AOF/RDB)
+│       ├── appendonly.aof.manifest
+│       ├── appendonly.aof.*.base.rdb
+│       └── appendonly.aof.*.incr.aof
+├── docker-compose.yml
+└── ...
+```
+
+**备份建议**：
+```bash
+# 备份 Redis 数据
+cp -r ./data/redis ./data/redis-backup-$(date +%Y%m%d)
+
+# 还原 Redis 数据
+cp -r ./data/redis-backup-20240101 ./data/redis
+```
+
+**迁移数据**：
+```bash
+# 导出 Redis 数据
+docker exec wx-admin-redis redis-cli BGSAVE
+docker cp wx-admin-redis:/data/dump.rdb ./data/redis/
+
+# 导入到新服务器
+cp -r ./data/redis /path/to/new/server/wx-admin/data/
+```
+
 ## ⚙️ 环境变量
 
 | 变量 | 默认值 | 说明 |

@@ -326,15 +326,14 @@ func autoHeartbeatLoop() {
 		if config.AutoHeartbeat {
 			userMapMu.RLock()
 			users := make([]string, 0)
-			for wxid, u := range userStatusMap {
-				if u.Survival == 1 {
-					users = append(users, wxid)
-				}
+			for wxid := range userStatusMap {
+				// 遍历所有用户，不管 survival 状态
+				users = append(users, wxid)
 			}
 			userMapMu.RUnlock()
 
 			if len(users) > 0 {
-				addLog("INFO", fmt.Sprintf("自动心跳: 开始, 共 %d 个在线用户", len(users)))
+				addLog("INFO", fmt.Sprintf("自动心跳: 开始, 共 %d 个用户", len(users)))
 			}
 
 			for _, wxid := range users {
@@ -343,6 +342,11 @@ func autoHeartbeatLoop() {
 				resp, err := client.Post(url, "application/json", nil)
 				if err != nil {
 					addLog("ERROR", fmt.Sprintf("[%s] 心跳: %s", getUserNickname(wxid), err.Error()))
+					userMapMu.Lock()
+					if u, ok := userStatusMap[wxid]; ok {
+						u.Survival = 0
+					}
+					userMapMu.Unlock()
 					continue
 				}
 				body, _ := io.ReadAll(resp.Body)
@@ -365,7 +369,8 @@ func autoHeartbeatLoop() {
 					// 心跳失败，判断是否已退出
 					offline := strings.Contains(msg, "退出") || strings.Contains(msg, "过期") ||
 						strings.Contains(msg, "expired") || strings.Contains(msg, "timeout") ||
-						strings.Contains(msg, "异常") || strings.Contains(msg, "失败")
+						strings.Contains(msg, "异常") || strings.Contains(msg, "失败") ||
+						strings.Contains(msg, "未找到")
 					if offline {
 						userMapMu.Lock()
 						if u, ok := userStatusMap[wxid]; ok {
@@ -695,10 +700,51 @@ func main() {
 			bodyStr = bodyStr[:300] + "..."
 		}
 		msg := getString(result, "Message")
+		addLog("INFO", fmt.Sprintf("CheckQR: Code=%d Success=%v Message=%s", code, success, msg))
 
 		// 861版本: 登录成功时 Code=0, Success=true, Message="登录成功"
-		if success && code == 0 && msg == "登录成功" {
+		if success && code == 0 && (msg == "登录成功" || strings.Contains(msg, "成功")) {
 			addLog("INFO", "登录成功")
+
+			// 从响应中提取用户信息
+			if data, ok := result["Data"].(map[string]interface{}); ok {
+				wxid := getString(data, "WxId")
+				if wxid == "" {
+					wxid = getString(data, "wxid")
+				}
+				if wxid == "" {
+					wxid = getString(data, "UserName")
+				}
+
+				if wxid != "" {
+					nickname := getString(data, "NickName")
+					if nickname == "" {
+						nickname = getString(data, "nickname")
+					}
+					avatar := getString(data, "HeadUrl")
+					if avatar == "" {
+						avatar = getString(data, "avatar")
+					}
+					device := getString(data, "DeviceName")
+					if device == "" {
+						device = getString(data, "device")
+					}
+
+					userMapMu.Lock()
+					userStatusMap[wxid] = &UserStatus{
+						Wxid:        wxid,
+						Nickname:    nickname,
+						Avatar:      avatar,
+						Device:      device,
+						Survival:    1,
+						LoginDate:   time.Now().Format("2006-01-02 15:04:05"),
+						RefreshDate: time.Now().Format("2006-01-02 15:04:05"),
+					}
+					userMapMu.Unlock()
+
+					addLog("INFO", fmt.Sprintf("用户已更新: %s (%s)", nickname, wxid))
+				}
+			}
 		} else if success && code == 0 {
 			// 等待扫码/确认
 		} else if code < 0 {

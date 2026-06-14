@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # wechatReal08 后端 (微信协议服务)
+  wx-backend:
+    image: wechatreal08  # 需要先构建 wechatReal08 镜像
+    ports:
+      - "8061:8061"
+    volumes:
+      - ./wechatReal08/conf:/app/conf
+    restart: unless-stopped
+
+  # Redis 服务
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # WX Admin 管理面板
+  wx-admin:
+    build: .
+    ports:
+      - "8022:8022"
+    environment:
+      - PORT=8022
+      - WX_API=http://wx-backend:8061
+      - ADMIN_TOKEN=admin123
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      - wx-backend
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:

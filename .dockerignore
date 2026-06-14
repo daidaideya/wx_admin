@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+wx-admin
+wx-admin.exe
+wx-admin.exe~
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Environment
+.env
+.env.example
+
+# Documentation
+README.md
+LICENSE
+
+# Temporary files
+*.tmp
+*.log

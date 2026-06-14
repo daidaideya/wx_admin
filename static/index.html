@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WX Admin - 微信授权管理</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 侧边栏 -->
+    <div class="sidebar" :class="{open: sidebarOpen}">
+      <div class="sidebar-header">
+        <i class="material-icons">webhook</i>
+        <h1>WX Admin</h1>
+      </div>
+      <nav class="sidebar-nav">
+        <a v-for="item in menuItems" :key="item.view"
+           class="nav-item" :class="{active: currentView === item.view}"
+           @click="navigate(item.view)">
+          <i class="material-icons">{{item.icon}}</i>
+          <span>{{item.text}}</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <span>v1.0.0</span>
+      </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main" @click="sidebarOpen = false">
+      <!-- 顶栏 -->
+      <header class="topbar">
+        <button class="menu-btn" @click.stop="sidebarOpen = !sidebarOpen">
+          <i class="material-icons">menu</i>
+        </button>
+        <h2>{{currentTitle}}</h2>
+        <div class="topbar-right">
+          <button class="icon-btn" @click="refreshData" title="刷新">
+            <i class="material-icons">refresh</i>
+          </button>
+        </div>
+      </header>
+
+      <!-- ====== 用户管理页 ====== -->
+      <div v-if="currentView === 'users'" class="page">
+        <div class="card">
+          <div class="card-head">
+            <h3>在线用户 <span class="badge">{{onlineCount}}/{{users.length}}</span></h3>
+            <button class="btn btn-primary" @click="showLoginDialog = true">
+              <i class="material-icons">add</i> 设备登录
+            </button>
+          </div>
+          <div class="batch-actions" v-if="selectedUsers.length">
+            <span class="selected-count">已选 {{selectedUsers.length}} 项</span>
+            <button class="btn btn-sm" @click="batchAction('again')">
+              <i class="material-icons">login</i> 二次登录
+            </button>
+            <button class="btn btn-sm" @click="batchAction('awake')">
+              <i class="material-icons">alarm</i> 唤醒
+            </button>
+            <button class="btn btn-sm btn-danger" @click="batchAction('logout')">
+              <i class="material-icons">logout</i> 退出
+            </button>
+            <button class="btn btn-sm btn-danger" @click="batchAction('delete')">
+              <i class="material-icons">delete</i> 删除
+            </button>
+            <button class="icon-btn" @click="selectedUsers = []" title="取消">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="col-check">
+                    <input type="checkbox" @change="toggleAll" :checked="allSelected">
+                  </th>
+                  <th>用户</th>
+                  <th>设备</th>
+                  <th>在线时间</th>
+                  <th>刷新时间</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="users.length === 0">
+                  <td colspan="7" class="empty">暂无在线用户，请先扫码登录</td>
+                </tr>
+                <tr v-for="u in users" :key="u.wxid"
+                    :class="{selected: selectedUsers.includes(u.wxid)}">
+                  <td class="col-check">
+                    <input type="checkbox" :checked="selectedUsers.includes(u.wxid)"
+                           @change="toggleSelect(u.wxid)">
+                  </td>
+                  <td>
+                    <div class="user-cell">
+                      <div class="avatar-wrap">
+                        <img :src="u.avatar || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiNlMGUwZTAiLz48Y2lyY2xlIGN4PSIyMCIgY3k9IjE2IiByPSI4IiBmaWxsPSIjYmRiZGJkIi8+PGVsbGlwc2UgY3g9IjIwIiBjeT0iMzQiIHJ4PSIxNCIgcnk9IjEwIiBmaWxsPSIjYmRiZGJkIi8+PC9zdmc+'" class="avatar">
+                        <span class="dot" :class="u.survival === 1 ? 'online' : 'offline'"></span>
+                      </div>
+                      <div class="user-info">
+                        <span class="name">{{u.nickname || '未知'}}</span>
+                        <span class="id">{{u.wxid}}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{u.device || '-'}}</td>
+                  <td>{{formatTime(u.loginDate)}}</td>
+                  <td>{{formatTime(u.refreshDate)}}</td>
+                  <td>
+                    <span class="status-tag" :class="u.survival === 1 ? 'online' : 'offline'">
+                      {{u.survival === 1 ? '在线' : '离线'}}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="icon-btn sm" @click="doAction('again', u.wxid)" title="二次登录">
+                        <i class="material-icons">login</i>
+                      </button>
+                      <button class="icon-btn sm" @click="doAction('awake', u.wxid)" title="唤醒">
+                        <i class="material-icons">alarm</i>
+                      </button>
+                      <button class="icon-btn sm" @click="doAction('heartbeat', u.wxid)" title="心跳">
+                        <i class="material-icons">favorite</i>
+                      </button>
+                      <button class="icon-btn sm danger" @click="doAction('logout', u.wxid)" title="退出">
+                        <i class="material-icons">logout</i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ====== 系统状态页 ====== -->
+      <div v-if="currentView === 'status'" class="page">
+        <div class="card">
+          <h3>系统概览</h3>
+          <div class="stat-grid">
+            <div class="stat-item">
+              <i class="material-icons">speed</i>
+              <div>
+                <span class="stat-label">CPU</span>
+                <span class="stat-value">{{sysStatus.cpu || '-'}}</span>
+              </div>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">memory</i>
+              <div>
+                <span class="stat-label">内存</span>
+                <span class="stat-value">{{sysStatus.memory || '-'}}</span>
+              </div>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">timer</i>
+              <div>
+                <span class="stat-label">运行时间</span>
+                <span class="stat-value">{{sysStatus.uptime || '-'}}</span>
+              </div>
+            </div>
+            <div class="stat-item">
+              <i class="material-icons">group</i>
+              <div>
+                <span class="stat-label">在线账号</span>
+                <span class="stat-value">{{onlineCount}}/{{users.length}}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="material-icons" style="font-size:20px;vertical-align:middle;margin-right:6px">receipt_long</i> 系统日志</h3>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="log-count">{{sysLogs.length}} 条</span>
+              <button class="btn btn-sm" @click="downloadLogs" title="下载日志">
+                <i class="material-icons">download</i> 下载
+              </button>
+            </div>
+          </div>
+          <div class="log-container">
+            <div v-if="sysLogs.length === 0" class="log-empty">暂无日志</div>
+            <div v-for="log in sysLogs" :key="log.id" class="log-item" :class="log.level.toLowerCase()">
+              <span class="log-time">[{{log.time}}]</span>
+              <span class="log-level">{{log.level}}</span>
+              <span class="log-msg">{{log.message}}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ====== 系统设置页 ====== -->
+      <div v-if="currentView === 'settings'" class="page">
+        <div class="card">
+          <h3>系统设置</h3>
+          <div class="setting-section">
+            <div class="setting-item">
+              <div class="setting-label">
+                <h4>用户同步</h4>
+                <p>从 Redis 同步已登录用户到管理端</p>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-primary" @click="syncUsers">
+                  <i class="material-icons">sync</i> 同步用户
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <hr class="divider">
+
+          <div class="setting-section">
+            <div class="setting-item">
+              <div class="setting-label">
+                <h4>自动心跳</h4>
+                <p>定时发送心跳保持在线状态</p>
+              </div>
+              <div class="setting-control">
+                <div class="heartbeat-config">
+                  <div class="config-row">
+                    <span style="font-size:13px;color:#888;">间隔</span>
+                    <input type="number" v-model.number="heartbeatInterval" min="30" max="600" class="input" style="width:80px;" @change="saveHeartbeatInterval">
+                    <span style="font-size:13px;color:#888;">秒</span>
+                  </div>
+                  <button class="btn" :class="heartbeatEnabled ? 'btn-primary' : ''" @click="toggleHeartbeat">
+                    <i class="material-icons">{{heartbeatEnabled ? 'favorite' : 'heart_broken'}}</i>
+                    {{heartbeatEnabled ? '心跳已开启' : '心跳已关闭'}}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr class="divider">
+
+          <div class="setting-section">
+            <div class="setting-item">
+              <div class="setting-label">
+                <h4>日志配置</h4>
+                <p>调整系统日志的存储策略</p>
+              </div>
+              <div class="setting-control">
+                <div class="log-config-form">
+                  <div class="config-row">
+                    <label>最大日志条数</label>
+                    <input type="number" v-model.number="logConfig.maxCount" min="100" max="100000" class="input" style="width:120px;">
+                  </div>
+                  <div class="config-row">
+                    <label>最大保留天数</label>
+                    <input type="number" v-model.number="logConfig.maxDays" min="1" max="365" class="input" style="width:120px;">
+                  </div>
+                  <button class="btn btn-primary" @click="saveLogConfig">
+                    <i class="material-icons">save</i> 保存
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr class="divider">
+
+          <div class="setting-section">
+            <div class="setting-item">
+              <div class="setting-label">
+                <h4>GitHub 代理</h4>
+                <p>用于加速访问 GitHub 资源</p>
+              </div>
+              <div class="setting-control">
+                <input type="text" v-model="settings.proxy" placeholder="http://127.0.0.1:7890" class="input">
+                <button class="btn" @click="saveSetting('proxy')">
+                  <i class="material-icons">save</i> 保存
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <hr class="divider">
+
+          <div class="setting-section">
+            <div class="setting-item">
+              <div class="setting-label">
+                <h4>程序信息</h4>
+              </div>
+              <div class="setting-control">
+                <div class="info-grid">
+                  <div><span class="info-key">版本:</span> {{sysInfo.version}}</div>
+                  <div><span class="info-key">作者:</span> {{sysInfo.author}}</div>
+                  <div><span class="info-key">编译:</span> {{sysInfo.compile_time}}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== 登录弹窗 ====== -->
+    <div v-if="showLoginDialog" class="dialog-overlay" @click.self="closeLoginDialog">
+      <div class="dialog">
+        <div class="dialog-head">
+          <h3>微信扫码登录</h3>
+          <button class="icon-btn" @click="closeLoginDialog">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+
+        <!-- 第一步：选设备 -->
+        <div v-if="!selectedDevice" class="dialog-body">
+          <div class="proxy-section">
+            <h4>代理设置（可选）</h4>
+            <div class="proxy-form">
+              <input type="text" v-model="proxy.ProxyIp" placeholder="代理地址 (socks5://ip:port)" class="input">
+              <input type="text" v-model="proxy.ProxyUser" placeholder="用户名" class="input">
+              <input type="password" v-model="proxy.ProxyPassword" placeholder="密码" class="input">
+            </div>
+          </div>
+
+          <div class="device-grid">
+            <div class="device-group" v-for="(devices, group) in deviceTypes" :key="group">
+              <h4>{{group.toUpperCase()}}</h4>
+              <div class="device-btns">
+                <button v-for="d in devices" :key="d.key"
+                        class="btn device-btn" @click="selectDevice(d)">
+                  {{d.description}}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 第二步：扫码 -->
+        <div v-else class="dialog-body">
+          <div class="selected-device-info">
+            <span>设备：{{selectedDevice.description}}</span>
+            <button class="btn btn-sm" @click="selectedDevice = null; qrImage = ''">
+              <i class="material-icons">arrow_back</i> 重选
+            </button>
+          </div>
+
+          <div class="qr-section" v-if="qrImage">
+            <img :src="qrImage" class="qr-img" alt="扫码登录">
+            <p class="qr-tip">请使用微信扫描二维码</p>
+          </div>
+          <div class="qr-section" v-else>
+            <div class="loading">
+              <i class="material-icons spinning">sync</i>
+              <span>正在获取二维码...</span>
+            </div>
+          </div>
+
+          <div v-if="loginMsg" class="login-msg" :class="loginMsgType">
+            {{loginMsg}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div v-if="toast.show" class="toast" :class="toast.type">
+      <i class="material-icons">{{toast.icon}}</i>
+      <span>{{toast.message}}</span>
+    </div>
+  </div>
+
+  <script src="/static/js/vue.global.prod.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

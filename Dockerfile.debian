@@ -1,0 +1,29 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates tzdata redis-server supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Asia/Shanghai
+
+# 配置 Redis
+RUN echo "bind 127.0.0.1" > /etc/redis/redis.conf && \
+    echo "protected-mode no" >> /etc/redis/redis.conf
+
+# 创建工作目录
+WORKDIR /app
+
+# 复制 wx-admin
+COPY wx-admin ./wx-admin
+COPY static ./static
+
+# 复制 docker-wx (需要先编译 linux/amd64 版本)
+COPY docker-wx-main ./docker-wx-main
+COPY docker-wx-conf ./docker-wx-conf
+
+# Supervisor 配置
+COPY supervisord.conf /etc/supervisord.conf
+
+EXPOSE 8022 8057
+
+CMD ["supervisord", "-c", "/etc/supervisord.conf"]
